@@ -6,7 +6,7 @@ import FishUnlockedNotification from './FishUnlockedNotification';
 import { UserContext } from '../UserContext';
 import styles from './FishIdentifier.module.css';
 
-export default function FishIdentifier() {
+export default function FishIdentifier({ onFishIdentified = () => {} }) {
   const [image, setImage] = useState(null);
   const [attachedImages, setAttachedImages] = useState([]);
   const [fishInfo, setFishInfo] = useState(null);
@@ -179,6 +179,7 @@ export default function FishIdentifier() {
         ...data,
         dateCaught: new Date().toLocaleString()
       });
+      onFishIdentified(data);
 
       // Show the unlocked notification
       setShowUnlockedNotification(true);

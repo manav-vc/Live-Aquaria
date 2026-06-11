@@ -132,10 +132,9 @@ function OceanSkybox() {
   );
 }
 
-export default function FishBackground() {
+export default function FishBackground({ refreshSignal = 0 }) {
   const [fishCatches, setFishCatches] = useState([]);
   const { user } = useContext(UserContext);
-  const eventSourceRef = useRef(null);
 
   useEffect(() => {
     const fetchFishCatches = async () => {
@@ -151,28 +150,7 @@ export default function FishBackground() {
     };
 
     fetchFishCatches();
-
-    // Set up SSE for real-time updates
-    if (user) {
-      eventSourceRef.current = new EventSource(`${import.meta.env.VITE_REACT_APP_API_URL}/fish-updates?username=${user.username}`);
-      
-      eventSourceRef.current.onmessage = (event) => {
-        const newFish = JSON.parse(event.data);
-        setFishCatches(prevFishes => [...prevFishes, newFish]);
-      };
-
-      eventSourceRef.current.onerror = (error) => {
-        console.error('SSE Error:', error);
-        eventSourceRef.current.close();
-      };
-    }
-
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
-    };
-  }, [user]);
+  }, [user, refreshSignal]);
 
 
   return (

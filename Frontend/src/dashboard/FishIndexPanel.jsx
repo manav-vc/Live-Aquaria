@@ -5,7 +5,7 @@ import { UserContext } from '../UserContext';
 import styles from './FishIndexPanel.module.css';
 
 
-export default function FishIndexPanel ({ onCatchSelect })  {
+export default function FishIndexPanel ({ onCatchSelect = () => {}, refreshSignal = 0 })  {
   const { user } = useContext(UserContext);
   const [catches, setCatches] = useState([]);
   const [isExpanded, setIsExpanded] = useState(true);
@@ -14,8 +14,10 @@ export default function FishIndexPanel ({ onCatchSelect })  {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchAllCatches();
-  }, []);
+    if (user) {
+      fetchAllCatches(searchQuery);
+    }
+  }, [user, refreshSignal]);
 
 
   //This is trying to fatch the fish from the mongooDb caught by that specific user  
