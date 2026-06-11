@@ -8,6 +8,11 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const { User, FishCatch } = require('./database'); // Import User and FishCatch models from the database
+const {
+  DEFAULT_GEMINI_MODEL,
+  buildGeminiModelList,
+  identifyFishWithFallback
+} = require('./fishIdentification');
 
 dotenv.config({ path: path.join(__dirname, '.env.local') });
 dotenv.config({ path: path.join(__dirname, '.env') });
@@ -49,11 +54,14 @@ mongoose.connect(process.env.MONGO_CONNECTION, { useNewUrlParser: true, useUnifi
   .catch(err => console.error('Could not connect to MongoDB', err));
 // Initialize the Google Generative AI client
 const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
-const geminiModelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-const model = genAI ? genAI.getGenerativeModel({ model: geminiModelName }) : null;
+const geminiModelNames = buildGeminiModelList(
+  process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
+  process.env.GEMINI_FALLBACK_MODELS
+);
+const geminiRetryAttempts = Number.parseInt(process.env.GEMINI_RETRY_ATTEMPTS || '2', 10);
 
 if (!process.env.GEMINI_API_KEY) {
-  console.error('Missing GEMINI_API_KEY. Fish identification will not work until it is configured.');
+  console.warn('Missing GEMINI_API_KEY. Fish identification will use demo fallback results.');
 }
 
 // Configure file upload storage
@@ -118,26 +126,6 @@ function fileToGenerativePart(filePath, mimeType) {
   };
 }
 
-function isGeminiAuthError(error) {
-  const errorText = `${error?.message || ''} ${error?.status || ''} ${error?.statusText || ''}`;
-  return /api key|apikey|unauthorized|forbidden|permission|401|403/i.test(errorText);
-}
-
-function isGeminiModelError(error) {
-  const errorText = `${error?.message || ''} ${error?.status || ''} ${error?.statusText || ''}`;
-  return /model.*not found|not supported|404/i.test(errorText);
-}
-
-function isGeminiQuotaError(error) {
-  const errorText = `${error?.message || ''} ${error?.status || ''} ${error?.statusText || ''}`;
-  return /quota|too many requests|429/i.test(errorText);
-}
-
-function isGeminiTemporaryError(error) {
-  const errorText = `${error?.message || ''} ${error?.status || ''} ${error?.statusText || ''}`;
-  return /service unavailable|high demand|temporar|503/i.test(errorText);
-}
-
 // Fish identification route
 app.post('/identify-fish', upload.single('image'), async (req, res) => {
   console.log('Received request body:', req.body);
@@ -164,12 +152,6 @@ app.post('/identify-fish', upload.single('image'), async (req, res) => {
   const filePath = path.resolve(req.file.path);
 
   try {
-    if (!model) {
-      return res.status(500).json({
-        error: 'Fish identification is not configured. Set GEMINI_API_KEY on the backend host.'
-      });
-    }
-
     // Prepare the image for AI analysis
     const imagePart = fileToGenerativePart(filePath, req.file.mimetype);
     // AI prompt for fish analysis 
@@ -198,26 +180,28 @@ app.post('/identify-fish', upload.single('image'), async (req, res) => {
       required: ["fishName", "rarityScore", "description", "location", "fishStory", "weight", "length"]
     };
 
-    const result = await model.generateContent({
-      contents: [
-        { role: "user", parts: [{ text: prompt }] },
-        { role: "user", parts: [imagePart] }
-      ],
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 1024,
-        topP: 1,
-        topK: 32,
-        responseMimeType: 'application/json',
-        responseSchema: jsonSchema
+    const aiResult = await identifyFishWithFallback({
+      genAI,
+      modelNames: geminiModelNames,
+      retryAttempts: Number.isNaN(geminiRetryAttempts) ? 2 : geminiRetryAttempts,
+      request: {
+        contents: [
+          { role: "user", parts: [{ text: prompt }] },
+          { role: "user", parts: [imagePart] }
+        ],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 1024,
+          topP: 1,
+          topK: 32,
+          responseMimeType: 'application/json',
+          responseSchema: jsonSchema
+        }
       }
     });
+    const { fishInfo, aiStatus, usedModel, fallbackReason } = aiResult;
 
-    //console.log("Working");
-    const response = await result.response;
-    const fishInfo = JSON.parse(await response.text());
-
-    console.log('AI generated fish info:', fishInfo);
+    console.log('Fish identification result:', { aiStatus, usedModel, fallbackReason, fishInfo });
     // Save fish catch to the database
     try {
 
@@ -252,7 +236,10 @@ app.post('/identify-fish', upload.single('image'), async (req, res) => {
       res.json({
         ...fishInfo,
         latitude: lat,
-        longitude: lon
+        longitude: lon,
+        aiStatus,
+        usedModel,
+        fallbackReason
       });
     } catch (dbError) {
       console.error('Database error:', dbError);
@@ -260,17 +247,7 @@ app.post('/identify-fish', upload.single('image'), async (req, res) => {
     }
   } catch (error) {
     console.error('Error processing image:', error);
-    let message = 'An error occurred while processing the image.';
-    if (isGeminiAuthError(error)) {
-      message = 'Fish identification API key is invalid or unauthorized. Update GEMINI_API_KEY on the backend host.';
-    } else if (isGeminiModelError(error)) {
-      message = 'Fish identification model is unavailable. Update GEMINI_MODEL on the backend host.';
-    } else if (isGeminiQuotaError(error)) {
-      message = 'Fish identification API quota is exhausted. Check Gemini API billing or rate limits.';
-    } else if (isGeminiTemporaryError(error)) {
-      message = 'Fish identification is temporarily unavailable because the Gemini model is busy. Please try again shortly.';
-    }
-    res.status(500).json({ error: message });
+    res.status(500).json({ error: 'An error occurred while processing the image.' });
   } finally {
     // Clean up the uploaded file
     fs.unlink(filePath, (err) => {

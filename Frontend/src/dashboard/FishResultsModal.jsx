@@ -19,7 +19,12 @@ const FishResultsModal = ({ fishInfo, image, onClose }) => {
           <img src={URL.createObjectURL(image)} alt={fishInfo.fishName} className={styles.fishImage} />
         </div>
         <h2 className={styles.fishName}>{fishInfo.fishName}</h2>
-        <p className={styles.fishJoke}>{fishInfo.joke}</p>
+        {fishInfo.joke && <p className={styles.fishJoke}>{fishInfo.joke}</p>}
+        {fishInfo.aiStatus === 'demo' && (
+          <p className={styles.fishJoke}>
+            Live AI is temporarily unavailable, so this demo-safe result keeps the upload flow running.
+          </p>
+        )}
 
         <div className={styles.progressContainer}>
           <div className={styles.statRow}>
