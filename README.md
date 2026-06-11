@@ -55,6 +55,18 @@ Many fishing enthusiasts lack a meaningful way to document their catches beyond 
    npm install
    ```
 
+## Environment Variables
+
+Create `Backend/.env.local` for local development, or set these directly in the hosted service environment:
+
+```
+MONGO_CONNECTION=your_mongodb_connection_string
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-2.5-flash
+```
+
+On Render, add/update `GEMINI_API_KEY` in the service's Environment tab and redeploy the backend. `GEMINI_MODEL` is optional; the backend defaults to `gemini-2.5-flash`. Do not commit real API keys.
+
 ## Running the Application
 
 1. Start the backend server:

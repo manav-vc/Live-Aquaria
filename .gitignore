@@ -1,0 +1,17 @@
+node_modules/
+Backend/node_modules/
+Frontend/node_modules/
+
+.env
+.env.*
+!.env.example
+Backend/.env
+Backend/.env.*
+!Backend/.env.example
+Frontend/.env
+Frontend/.env.*
+!Frontend/.env.example
+
+uploads/
+Backend/uploads/
+Frontend/dist/

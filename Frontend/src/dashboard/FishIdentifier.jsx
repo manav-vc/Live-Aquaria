@@ -169,13 +169,12 @@ export default function FishIdentifier() {
         method: 'POST',
         body: formData,
       });
+      const data = await parseResponseBody(response);
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to analyze fish');
+        throw new Error(data.error || 'Failed to analyze fish');
       }
 
-      const data = await response.json();
       setFishInfo({
         ...data,
         dateCaught: new Date().toLocaleString()
@@ -207,6 +206,16 @@ export default function FishIdentifier() {
     setIsResultsModalOpen(false);
     setAttachedImages([]);
   };
+
+  async function parseResponseBody(response) {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      return response.json();
+    }
+
+    const text = await response.text();
+    return { error: text };
+  }
 
   if (!user) {
     return <div className={styles.loginPrompt} >Please log in to use Live Aquaria</div>;
